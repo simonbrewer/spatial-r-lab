@@ -4,7 +4,7 @@ author: |
   | Simon Brewer
   | Geography Department
   | University of Utah
-  date: "August 03, 2021"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   html_document:
     toc: true
@@ -22,7 +22,8 @@ This lab is designed to give you a brief introduction to using spatial data in [
 You can use R as it is, but for this course we will use R in combination with the [RStudio][rsID] interface (also freeware), which has a well organized layout and several extra options. *As you work through the lab, you should read the help documents for the functions you use as well as try different parameters or variables.* 
 
 ## A quick note on formatting
-In this and subsequent labs, code that can be entered into R will be high-lit, e.g.:
+
+Code that can be entered into R will be high-lit, e.g.:
 
 ```{r eval=FALSE}
 
@@ -34,7 +35,7 @@ And R output will be formatted with `##` at the start of the line. File names wi
 
 ## Linking to CMES data
 
-To get access to the data files, simply connect to my data directory on the CMES server. To do this under Mac OSX, open the 'data' shortcut on your desktop, then go to the Finder menu at the top of the screen. Choose [Go] > [Go to Folder]. When the dialog box opens up asking which folder to go to, simply type my University ID 'u0784726', and this should open my data directory. Copy to the file 'Spatial R Lab.zip', which contains this file and the data files needed for the lab to your 'home' directory. Unzip the file to create a directory called 'Spatial R Lab'.
+To get access to the data files, simply connect to my data directory on the CMES server. To do this under Mac OSX, open the 'data' shortcut on your desktop, then go to the Finder menu at the top of the screen. Choose [Go] > [Go to Folder]. When the dialog box opens up asking which folder to go to, simply type my University ID 'u0784726', and this should open my data directory. Copy to the file 'Spatial R Lab.zip', which contains this file and the data files needed for the lab to your 'home' directory. Unzip the file to create a directory called 'Spatial R Lab'. In this folder, you find this html file, as well as a subfolder called `data` that contains any files we will need. 
 
 # Brief introduction to R
 
@@ -56,24 +57,33 @@ As you will be typing a lot of commands in R, sometimes with quite complex synta
 
 If you are using base R, you will only see the console and the plot window. Other windows (e.g. help) can be opened from the menu or during a working session. 
 
+## Working directory
+
+R defines the working directory as the folder in which it is currently working. When you ask R to open a certain file, it will look in the working directory for this file, and when you tell R to save a data file or plot, it will save it in the working directory. 
+
+Before doing anything else them we need to change R's working directory so that it is pointing to the folder you just created (`Spatial R Lab`). The easiest way to do this is by going to the [Session] menu in RStudio, then [Change working directory]. This will open a file browser that you can use to browse through your computer and find the folder. (If you are using the base version of R, go to [File] $>$ [Change dir...] in Windows, or [Misc] $>$ [Change Working Directory] in Mac.)
+
 ## Reading data from files
 
-R can use many different file types, but comma-separated value (csv) files are recommended as the easiest way to transfer between R and Excel. Start downloading the file *iris.csv* to your computer, then change R's working directory to where this file is located. Then get a list of files as follows (note the use of the `pattern` parameter to filter the list of files returned):
+R can use many different file types, but comma-separated value (csv) files are recommended as the easiest way to transfer between R and Excel. For examples, we are going to use a dataset of morphological measurements of three species of penguin. More information about this dataset can be found here: [https://allisonhorst.github.io/palmerpenguins/index.html](https://allisonhorst.github.io/palmerpenguins/index.html)
+
+Let's get a list of files in the `data` folder as follows (note the use of the `pattern` parameter to filter the list of files returned):
 
 ```{r}
 
-list.files("./", pattern=".csv")
+list.files("./data/", pattern=".csv")
 
 ```
-Now read in a file
+
+The *penguins.csv* file is the one we need. To read this in, we use the `read.csv()` function. Note that we use the assignation operator (`<-`) to create an R data frame called `penguins`. This stores a copy of the data in the file, and it is what you will work with. 
 
 ```{r}
 
-iris <- read.csv("iris.csv")
+penguins <- read.csv("./data/penguins.csv")
 
 ```
 
-And check to see the variable `iris` that has been created in the R workspace (note that variable `x` we created earlier is also there).
+To check to see that the dataframe has been created and is available use, you can use the `ls()` function to list all available R objects. You can also check this in the 'Environment' tab in RStudio. 
 
 ```{r}
 
@@ -81,25 +91,25 @@ ls()
 
 ```
 
-R will store data read in a *dataframe*. To print out the contents of any variable, simply type the name of that variable at the command prompt. Other useful commands are `class()` to see what data class a variable is, and `names()` to get a list of the column headers. The function `str()` reports the structure of the data set, describing the column names and the type of data stored in them.
+R will store data read from CSV filesin  a *dataframe*. To print out the contents of any object, simply type the name of that object at the command prompt. Other useful commands are `class()` to see what data class a object is, and `names()` to get a list of the column headers. The function `str()` reports the structure of the object, describing the column names and the type of data stored in them.
 
 ```{r, results='hide'}
 
-iris
-class(iris)
-names(iris)
-str(iris)
+penguins
+class(penguins)
+names(penguins)
+str(penguins)
 
 ```
 
 ## Manipulating variables in R
 
-In order to access the values in a dataframe or other R object, there are two main methods: column notation and indexing. Column notation uses the dollar sign ($) after the name of dataframe, with the column name appended (note that R replaces any white spaces in the column names with '.'). For example:
+In order to access the values in a dataframe or other R object, there are two main methods: column notation and indexing. Column notation uses the dollar sign (`$`) after the name of dataframe, with the column name appended (note that R replaces any white spaces in the column names with '`.`'). For example:
 
 ```{r, results='hide'}
 
-iris$Species
-iris$Sepal.Length
+penguins$species
+penguins$bill_length_mm
 
 ```
 
@@ -107,49 +117,55 @@ Indexing uses a coordinate system to access variables. These are given in bracke
 
 ```{r, results='hide'}
 
-iris[ ,1:4]  		# Columns 1 to 4
-iris[1:10, ]			# First 10 rows
-iris[1:20,1:2]	# Indices can be combined
-iris$Sepal.Length[1:25]	# Note that indices can be combined
-iris$Sepal.Length[3]  		# 3rd element
-iris$Sepal.Length[-3]		# All but 3rd element
+penguins[ ,1:4]  		# Columns 1 to 4
+penguins[1:10, ]			# First 10 rows
+penguins[1:20,1:2]	# Indices can be combined
+penguins$bill_length_mm[1:25]	# Note that indices can be combined
+penguins$bill_length_mm[3]  		# 3rd element
+penguins$bill_length_mm[-3]		# All but 3rd element
 
 ```
 
 ## Writing data to files
 
-Variables created in R may also written out to csv files using the `write.csv()` function. As an example we create a variable that is the ratio of petal length to petal width, and then write this to a csv file:
+Variables created in R may also written out to csv files using the `write.csv()` function. As an example we create a variable that is the ratio of bill length to bill depth. By using the `$` notation, we can create a new column in the `penguins` dataframe:
 
 ```{r, results='hide'}
 
-plpw = iris$Petal.Length / iris$Petal.Width
-write.csv(plpw, "test.csv")
+penguins$bld_ratio = penguins$bill_length_mm / penguins$bill_depth_mm
+names(penguins)
 
 ```
 
-This will write a csv file called _test.csv_ in your working directory, containing the values in the vector `plpw`, created from the original data frame . Note that R uses the variable name as a column header and adds a column with line numbers. You can remove the line numbers by adding the parameter `row.names=FALSE` to the `write.csv()` function. 
+Note that this new column only exists in R's copy of the data. If you want to save this to a file for future use, you'll need to write it out:
+
+```{r, results='hide'}
+
+write.csv(penguins, "test.csv")
+
+```
+
+This will write a csv file called *test.csv* in your working directory, containing the all the original penguins data values plus the new vector of length/depth ratios. Note that R uses the variable name as a column header and adds a column with line numbers. You can remove the line numbers by adding the parameter `row.names=FALSE` to the `write.csv()` function. 
 
 ## Some basic statistical functions
 
-We will now create some new vectors in R containing the sepal lengths and petal lengths, in order to use these with functions. We do this here simply to cut down on the amount of typing you will have to do; you could equally use the data frame directly with the functions by using the indexing method described. 
-
-```{r, results='hide'}
-
-sl = iris$Sepal.Length
-sw = iris$Sepal.Width
-sp = iris$Species
-
-```
-
-If you check the data types for each of these new vectors using `class()` you should see that the first two are numeric and the third is a vector of character strings (the species names).  R has a additional data type called *factors* which can be used to regroup your data (we'll see examples of this later). We'll convert the vector of species names to factors using `as.factor()`:
+We will now look at some simple functions in R to analyze the penguins data. To start, let's check the types of data that are available:
 
 ```{r}
 
-sp = as.factor(sp)
+str(penguins)
 
 ```
 
-Each unique string is now considered as a level in this factor grouping. If you now print the content of the vector by typing `sp`, you should at the end the list of three levels (`setosa versicolor virginica`). 
+This shows that the data are a mix of numeric (floating-point), integer and character strings (e.g. the species name). R has a additional data type called *factors* which can be used to group character strings together (we'll see examples of this later). This is useful here, as it would allow us to analysze all penguins from the same species together. We can convert the vector of species names to factors using `as.factor()`:
+
+```{r}
+
+penguins$species = as.factor(penguins$species)
+
+```
+
+Each unique string is now considered as a level in this factor grouping. If you now print the content of the vector by typing `penguins$species`, you should at the end the list of three levels (`setosa versicolor virginica`). Note that you can avoid this skip by reading in the data with the argument `stringsAsFactors = TRUE` in `read.csv()`
 
 R has a large number of inbuilt functions. This section is designed to simply introduce you to the some basic functions for describing data. To find out more about the functions, and how you can change parameters, use the `help()` function or the `?` operator, e.g.:
 
@@ -164,10 +180,26 @@ This will open a window with the help file for that function. If you do not know
 
 ### Functions to describe the central tendency:
 
+Let's start by calculating the mean:
 ```{r, results='hide'}
 
-mean(sl)
-median(sl)
+mean(penguins$bill_depth_mm)
+
+```
+
+Well, that didn't work. The data we are trying to estimate the mean from have a couple of missing values, and R's default behavior is to not calculate anything. If you add the argument `na.rm = TRUE`, R will ignore these and then just use the remaining values:
+
+```{r, results='hide'}
+
+mean(penguins$bill_depth_mm, na.rm = TRUE)
+
+```
+
+You can also calculate the median
+
+```{r, results='hide'}
+
+median(penguins$bill_depth_mm, na.rm = TRUE)
 
 ```
 
@@ -175,12 +207,12 @@ median(sl)
 
 ```{r, results='hide'}
 
-sd(sl) ## Standard deviation
-var(sl) ## Variance
-min(sl) ## Minimum
-max(sl) ## Maximum
-range(sl) ## Min and Max
-quantile(sl) ## Quantile (50% by default)
+sd(penguins$bill_length_mm, na.rm = TRUE) ## Standard deviation
+var(penguins$bill_length_mm, na.rm = TRUE) ## Variance
+min(penguins$bill_length_mm, na.rm = TRUE) ## Minimum
+max(penguins$bill_length_mm, na.rm = TRUE) ## Maximum
+range(penguins$bill_length_mm, na.rm = TRUE) ## Min and Max
+quantile(penguins$bill_length_mm, na.rm = TRUE) ## Quantile (50% by default)
 
 ```
 
@@ -188,12 +220,14 @@ Note that `quantile()` takes a parameter that allows you to choose the quantile 
 
 ## Functions to assess the relationship between pairs of variables.
 
-Standard functions include calculation of the covariance and correlation:
+Standard functions include calculation of the covariance and correlation. Let's estimate these values for the bill length and body mass. The argument here to skip the missing values is a little different. 
 
 ```{r, results='hide'}
 
-cov(sl, sw)
-cor(sl, sw)
+cov(penguins$bill_length_mm, penguins$body_mass_g,
+    use = 'pairwise.complete.obs')
+cor(penguins$bill_length_mm, penguins$body_mass_g,
+    use = 'pairwise.complete.obs')
 
 ```
 
@@ -201,33 +235,34 @@ The correlation function gives Pearson's coefficient by default, but can be chan
 
 ```{r, results='markup'}
 
-cor.test(sl, sw) 
+cor.test(penguins$bill_length_mm, penguins$body_mass_g,
+    use = 'pairwise.complete.obs') 
 
 ```
 
 ### The `tapply()` function
 
-The file contains observations for three different species of iris. As we converted the vector of species names to a factor, R can use this to calculate statistics by group using the `tapply()` function. This takes three arguments: the vector of values, the vector of factors and the statistic to calculate. So to get the mean sepal width of the three species:
+The file contains observations for three different species of penguin. As we converted the vector of species names to a factor, R can use this to calculate statistics by group using the `tapply()` function. This takes three arguments: the vector of values, the vector of factors and the statistic to calculate. So to get the mean sepal width of the three species:
 
 ```{r}
 
-tapply(sw, sp, mean)
+tapply(penguins$bill_length_mm, penguins$species, mean, na.rm = TRUE)
 
 ```
 
-Try calculating the standard deviation for each species.
+You can easily estimate other summary statistics by replacing `mean`. Try calculating the standard deviation for each species.
 
 ### Some other useful functions:
 
-`levels()` and `table()` are very useful for summarizing factor data (`table()` can also be used to make cross tables). The `summary()` function is one of the most important as it is used frequently in R to print output from analysis as well as summary statistics.
+`levels()` and `table()` are very useful for summarizing factor data (`table()` can also be used to make cross tables). `sum()` calculates the total for a numeric column. The `summary()` function is one of the most important as it is used frequently in R to print output from analysis as well as summary statistics. It's also a great way to check for mssing values in your data.
 
 ```{r, results='hide'}
 
-levels(sp)
-table(sp)
-sum(sl)
-summary(sl)
-summary(iris)
+levels(penguins$species)
+table(penguins$species)
+sum(penguins$bill_length_mm, na.rm = TRUE)
+summary(penguins$bill_length_mm)
+summary(penguins)
 
 ```
 
@@ -239,8 +274,10 @@ Histograms are commonly used to summarize data, where values are 'binned' into a
 
 ```{r, fig.keep='none'}
 
-hist(sl, breaks=20, main="Histogram of sepal lengths")
-hist(sl, breaks=seq(0,10,0.5),
+hist(penguins$body_mass_g, 
+     breaks=20, main="Histogram of body mass", xlab = "g")
+hist(penguins$body_mass_g, 
+     breaks=seq(2500,6500,500),
      main="Histogram of sepal lengths")
 
 ```
@@ -249,7 +286,9 @@ An alternative to histograms are boxplots, which show information about the data
 
 ```{r, fig.keep='none'} 
 
-boxplot(sl)
+boxplot(penguins$body_mass_g,
+        main = "Boxplot of body mass",
+        ylab = "g")
 
 ```
 
@@ -257,7 +296,10 @@ To make this more useful, we can produce a boxplot for each of the three species
 
 ```{r}
 
-boxplot(sl ~ sp)
+boxplot(body_mass_g ~ species,
+        data = penguins,
+        main = "Boxplot of body mass",
+        ylab = "g")
 
 ```
 
@@ -267,7 +309,7 @@ Bivariate plots are designed to show the relationship between two variables, and
 
 ```{r}
 
-plot(sl,sw)
+plot(penguins$bill_length_mm, penguins$body_mass_g)
 
 ```
 
@@ -275,8 +317,9 @@ The `plot()` function has a large number of parameters to help modify the figure
 
 ```{r, fig.keep='none'}
 
-plot(sl,sw, pch=16, col=2,
-     xlab='Petal Length', ylab='Sepal Length')
+plot(penguins$bill_length_mm, penguins$body_mass_g, 
+     pch = 16, col = 2,
+     xlab = 'Bill length (mm)', ylab = 'Body mass (g)')
 
 ```
 
@@ -284,8 +327,9 @@ Rather than using the same color for all points, we can use a vector defining a 
 
 ```{r, fig.keep='none'}
 
-plot(sl,sw, pch=16, col = sp,
-     xlab='Petal Length', ylab='Sepal Length')
+plot(penguins$bill_length_mm, penguins$body_mass_g, 
+     pch = 16, col = penguins$species,
+     xlab = 'Bill length (mm)', ylab = 'Body mass (g)')
 
 ```
 
@@ -295,7 +339,7 @@ Line plots are a good way to visualize data that forms a natural series, e.g. ti
 
 ```{r echo=FALSE}
 
-co2 = read.csv("co2_mm_mlo.csv")
+co2 = read.csv("./data/co2_mm_mlo.csv")
 
 ```
 ```{r}

@@ -165,7 +165,7 @@ penguins$species = as.factor(penguins$species)
 
 ```
 
-Each unique string is now considered as a level in this factor grouping. If you now print the content of the vector by typing `penguins$species`, you should at the end the list of three levels (`setosa versicolor virginica`). Note that you can avoid this skip by reading in the data with the argument `stringsAsFactors = TRUE` in `read.csv()`
+Each unique string is now considered as a level in this factor grouping. If you now print the content of the vector by typing `penguins$species`, you should see the set of species names after the output. Note that you can avoid this skip by reading in the data with the argument `stringsAsFactors = TRUE` in `read.csv()`
 
 R has a large number of inbuilt functions. This section is designed to simply introduce you to the some basic functions for describing data. To find out more about the functions, and how you can change parameters, use the `help()` function or the `?` operator, e.g.:
 
@@ -236,7 +236,7 @@ The correlation function gives Pearson's coefficient by default, but can be chan
 ```{r, results='markup'}
 
 cor.test(penguins$bill_length_mm, penguins$body_mass_g,
-    use = 'pairwise.complete.obs') 
+         use = 'pairwise.complete.obs') 
 
 ```
 
@@ -370,7 +370,7 @@ A similar function (`points()`) can be used to add points to an existing plot.
 
 # Spatial data in R
 
-R has a series of add-on packages designed for use with spatial data. If you are using your own computer, you will need to install these before proceeding (these should be preinstalled on the lab computers). To install a package, either use the `Install` button from the 'Packages' tab, or use the following command, where *nameofmypackage* is the package you wish to install:
+R has a series of add-on packages designed for use with spatial data. The packages we need are preinstalled on the lab computers, so you can ignore this step if you are using one of these. If you are using your own computer, you may need to install these before proceeding. To install a package, either use the `Install` button from the 'Packages' tab, or use the following command, where *nameofmypackage* is the package you wish to install:
 
 ```{r eval=FALSE}
 
@@ -384,48 +384,111 @@ For this lab, we will need the following packages:
 - **gstat**: geostatistical interpolation
 - **RColorBrewer**: color scales for maps
 
-Install these now if you need to (note that you can include the name of multiple packages in the `install.packages()` command). Once installed, you will need to load each package into R's workspace in order to use it:
+We will also use a package developed by Gabe to access and analyze water isotope data called **isoWater**. This depends on an additional piece of software for Gibbs sampling called JAGS. Again, this is preinstalled on the lab computers, but you will need to install if you are working on your own laptop. You can download installers for JAGS [here][jagsID]. Once you've successfully installed this, you can then install the **isoWater** package in R using the methods described above. If you run into any problems during these installation steps, please ask for help!
 
-```{r eval=FALSE}
+Once installed, you will need to load each package into R's workspace in order to use it using the `library()` function. For the moment, we'll just load the **sf** package:
 
-library(nameofmypackage)
+```{r eval=TRUE, message=FALSE}
+
+library(sf)
 
 ```
 
-**Packages only need to be installed once, but need to be loaded every time you restart R.**
+**Note that packages only need to be installed once, but need to be loaded every time you restart R.** 
+
+## Reading spatial data
 
 The easiest way to get spatial data into R is to export it from a GIS package in a standard vector or raster format. Shapefiles are one of the most commonly used formats for vector data, and the **sf** package includes a function (`st_read()`) for reading these directly into R as spatial objects. 
 
-## Point Objects
+We'll start by reading in a shapefile with county boundaries for Utah. make sure that this is unzipped in your `data` folder, and read it in as follows:
 
-The zip file *UT_WI2.zip* contains a shapefile with water isotope data recorded from a set of locations in Utah. In order to read this in to R, we first load the required packages, then read in the shapefile data, using the function `st_read()`. This takes a single argument: the name of the shapefile to load (including any directory information):
+```{r message=FALSE}
 
-```{r results='hide', message=FALSE}
-
-library(sf)
-ut_wi = st_read("./UT_WI2/ut_wi2.shp")
-class(ut_wi)
+ut_cnty <- st_read("./data/utahcounty/utahcounty.shp")
+class(ut_cnty)
 
 ```
 
-The data is read into a `sf` object, which is a data frame. This include an additional column called `geometry` which contains the coordinate information for each observation. 
+The data is read into a simple feature or `sf` object, which is simply a modified data frame. This include an additional column called `geometry` which contains the coordinate information for each observation. 
+
+```{r }
+
+head(ut_cnty)
+
+```
+
+As this is a spatial object, it also has a number of specific attributes, including:
+
+- The bounding box
+
+```{r message=FALSE, results='hide'}
+
+st_bbox(ut_cnty)
+
+```
+
+- The set of coordinates (this will be printed as one line per polygon vertex) 
+
+```{r message=FALSE, results='hide'}
+
+st_coordinates(ut_cnty)
+
+```
+
+- The coordinate reference system (information about the projection used for the data):
+
+```{r message=FALSE, results='hide'}
+
+st_crs(ut_cnty)
+
+```
+
+As this has not yet been set, it simply returns a missing value or `NA`. As we know this data is in a longitude/latitude based on the WGS84 ellipsoid, we can add this information as a coordinate reference system with the function `st_crs()`. Adding this information will allow you to re-project the data to match other datasets (an example of this is provided later). 
+
+Several methods exist to identify a CRS, but by far the easiest is to use its EPSG code. To find the EPSG code for a CRS, you can visit this website: [spatialreference.org](https://spatialreference.org/). For these data, the EPSG code is 4326:
+
+```{r message=FALSE}
+
+st_crs(ut_cnty)
+st_crs(ut_cnty) <- 4326
+st_crs(ut_cnty)
+
+```
+
+Once set, the CRS is printed in WKT format, a standard for spatial data. 
+
+Next, we'll load some isotope data using the **isoWater** package. If you were not able to install this for any reason, see the appendix below for code to read an earlier version of this data from a shapefile. Start by loading the library
+
+```{r message = FALSE}
+
+library(isoWater)
+
+```
+
+Now use the function `wiDB_data()` to download the data. Here we restrict the data to stream and river samples from Utah. See `help(wiDB_data)` for other criteria that can be used to refine your search. 
+
+```{r}
+
+ut_wi_db = wiDB_data(states = "UT", types = "River_or_stream")
+
+```
+
+This will create a new R list object (`ut_wi`) containing both the data and metadata relating to the provenance of the data. The data can be converted to an `sf` object using `st_as_sf()`, by providing the name of the dataframe and the columns containing the x and y coordinates and (optionally) the CRS. 
+
+```{r}
+
+ut_wi <- st_as_sf(ut_wi_db$data, 
+                  coords = c("Longitude", "Latitude"),
+                  crs = 4326)
+
+```
+
+As before, we can inspect various spatial attributes of the data:
 
 ```{r message=FALSE, results='hide'}
 
 st_bbox(ut_wi)
 st_coordinates(ut_wi)
-st_crs(ut_wi)
-
-```
-
-The last of these shows the coordinate reference system - information about the projection used for the data. As this has not yet been set, it simply returns a missing value or `NA`. As we know this data is in a longitude/latitude based on the WGS84 ellipsoid, we can add this information as a coordinate reference system with the function `st_crs()`. Adding this information will allow you to re-project the data to match other datasets (an example of this is provided later). 
-
-Several methods exist to identify a CRS, but by far the easiest is to use its EPSG code. To find the EPSG code for a CRS, you can visit this website: [spatialreference.org](https://spatialreference.org/).  For these data, the EPSG code is 4326:
-
-```{r message=FALSE}
-
-st_crs(ut_wi)
-st_crs(ut_wi) <- 4326
 st_crs(ut_wi)
 
 ```
@@ -467,7 +530,7 @@ R's conditional selection can be used to cut out various parts of the data objec
 
 ```{r fig.keep='high'}
 
-ut_wi_spatial = ut_wi[ut_wi$WI_Analy_2 == "SPATIAL", ]
+ut_wi_spatial = ut_wi[ut_wi$WI_Analysis_Source == "SPATIAL", ]
 plot(st_geometry(ut_wi), axes=TRUE)
 plot(st_geometry(ut_wi_spatial), col="red", add = TRUE)
 
@@ -485,38 +548,8 @@ Or categorical variables by first converting them to factors:
 
 ```{r fig.keep='none'}
 
-ut_wi$WI_Analy_2 <- as.factor(ut_wi$WI_Analy_2)
-plot(ut_wi["WI_Analy_2"], pch = 16)
-
-```
-
-## Polygon objects
-
-Polygons can be created using a combination of the `st_polygon()` function but by far the easiest way to get polygon data into R is, again, to import it as a shapefile. The zip file *utahcounty.zip* contains a shapefile with county boundaries for Utah as polygons. Unzip this in your current working directory, then read in the data as follows:
-
-```{r message=FALSE}
-
-ut_cnty <- st_read("utahcounty/utahcounty.shp")
-st_crs(ut_cnty) <- 4326
-class(ut_cnty)
-
-```
-
-We can see the names of the variables in the attribute table as follows, and extract the list of county names:
-
-```{r results='hide'}
-
-names(ut_cnty)
-ut_cnty$NAME
-
-```
-
-We can again make a simple plot of the county boundaries. We can add the location of the isotope samples by using the `add=TRUE` parameter:
-
-```{r fig.keep='none'}
-
-plot(st_geometry(ut_cnty))
-plot(st_geometry(ut_wi), col=2, pch=16, add=TRUE)
+ut_wi$WI_Analysis_Source <- as.factor(ut_wi$WI_Analysis_Source)
+plot(ut_wi["WI_Analysis_Source"], pch = 16)
 
 ```
 
@@ -529,14 +562,18 @@ The **stars** package includes a function (`read_stars()`) for reading raster fi
 ```{r fig.keep='none', results='hide', message=FALSE}
 
 library(stars)
-win_d2h <- read_stars("predkrig2.asc")
+win_d2h <- read_stars("./data/predkrig2.asc")
 st_crs(win_d2h) <- 4326
 class(win_d2h)
 
 ```
 
+You can make a simple plot of the `stars` object as follows:
+
 ```{r}
+
 plot(win_d2h)
+
 ```
 
 By default, the file name is used to assign a variable name. We can change this to something more meaningful:
@@ -561,13 +598,14 @@ plot(st_geometry(slc))
 We can now use this to clip out only the samples falling in this region:
 
 ```{r fig.keep='none'}
+
 slc_wi = ut_wi[slc,]
-plot(st_geometry(slc))
-plot(st_geometry(slc_wi), col=3, add=TRUE)
+plot(st_geometry(slc), main = "Salt Lake County")
+plot(st_geometry(slc_wi), col=3, pch = 16, add=TRUE)
 
 ```
 
-We can also crop out the part of the IsoMAP grid for this county. 
+We can also crop out the part of the IsoMAP grid for this county (try not to be overwhelmed by the fine resolution). 
 
 ```{r fig.keep='none'}
 
@@ -577,7 +615,7 @@ plot(slc_d2h, add = TRUE)
 
 ```
 
-The `st_extract()` function does overlay calculations. For example, we can get the value of the gridded data at each of the SPATIAL point locations as follows:
+The `st_extract()` function does overlay calculations. For example, we can get the value of the gridded data at each of the isotope point locations as follows:
 
 ```{r results='hide'}
 
@@ -653,7 +691,9 @@ Similar approaches can be used with point data. Here we estimate the value of th
 
 slc_wi = st_extract(win_d2h, at = slc_wi)
 tm_shape(slc_wi) +
-  tm_symbols(col = "d2H", palette = "Blues", alpha = 0.5)
+  tm_symbols(col = "d2H", palette = "Blues", alpha = 0.5) +
+  tm_shape(slc) +
+  tm_borders()
 
 ```
 
@@ -692,7 +732,7 @@ We'll use this here to analyze part of the Utah Water Isotope dataset loaded ear
 
 ```{r results='hide'}
 
-ut_wi_spatial = ut_wi[ut_wi$Type == "Tap" & ut_wi$WI_Analy_2 == "SPATIAL", ]
+ut_wi_spatial = ut_wi[ut_wi$WI_Analysis_Source == "SPATIAL", ]
 dim(ut_wi_spatial)
 
 ```
@@ -730,20 +770,20 @@ Note that we can also set the cutoff (maximum range over which distances are cal
 
 ```{r  fig.keep='none'}
 
-d18O.var = variogram(d18O ~ 1, ut_wi_spatial, cutoff=50, width=2.5)
+d18O.var = variogram(d18O ~ 1, ut_wi_spatial, cutoff=60, width=2.5)
 plot(d18O.var)
 
 ```
 
 Try different values to see the effect on the variogram. 
 
-The next step is to fit a variogram model to capture this spatial structure. To start, we fit a model by eye. We need to specify: a) the model form; b) the value of the nugget (the intercept with the Y axis); c) the model range (the distance at which the sample variogram becomes flat); d) the sill, the semivariance value (y-axis) of the range. Here we specify these as separate variables, then use the `vgm()` function to build our model. 
+The next step is to fit a variogram model to capture this spatial structure. To start, we fit a model by eye. We need to specify: a) the model form; b) the value of the nugget (the intercept with the Y axis); c) the model range (the distance at which the sample variogram becomes flat); d) the sill, the semivariance value (y-axis) of the range. Here we specify these as separate variables, then use the `vgm()` function to build our model. [If you are working with the shapefile data, you will need to alter the `modSill` and `modNugget` values to something a little lower.]
 
 ```{r fig.keep='none'}
 
-modSill = 0.8
+modSill = 6
 modRange = 40
-modNugget = 0.25
+modNugget = 2
 d18O.vgm1 = vgm(psill=modSill, "Sph", range=modRange, nugget=modNugget)
 plot(d18O.var, d18O.vgm1)
 
@@ -768,8 +808,8 @@ d18O.vgm2
 
 We now use our fitted model to predict d18O values. The `krige()` function performs spatial prediction, using ordinary kriging as a default. This requires a set of input:
 - A model formula specifying the variable to be predicted (this can be extended to include covariates, here we add '1' as no covariates are used)
-- The `Spatial*` object with the observed values
-- A `Spatial*` object with the coordinates to be used for prediction
+- The `sf` object with the observed values
+- A `sf` or `stars` object with the coordinates to be used for prediction
 - The fitted variogram model
 - An optional parameter that limits the number of points to be used in predicting any given location
 
@@ -825,7 +865,7 @@ d18O.cv.ok <- krige.cv(d18O ~ 1, ut_wi_spatial, d18O.vgm2, nmax=40, nfold=5)
 
 ```
 
-Once run, we calculate two statistics from this: the root mean squared error of prediction (RMSEP) and the R$^2_P$ of prediction: 
+This outputs a `sf` object with the predicted and observed values for each location (as well as the error and the fold number. We can use the error (`residual`) to estimate two key measures of predictive skill: the root mean squared error of prediction (RMSEP) and the R$^2_P$ of prediction: 
 
 ```{r}
 
@@ -836,7 +876,37 @@ cor(d18O.cv.ok$observed, d18O.cv.ok$var1.pred)^2
 
 ```
 
-# Where to get help
+# Appendix 1: Reading isotope data from a file
+
+If you were not able to load data through the **isoWater** package, then follow these steps to load an earlier version of the dataset. In the `data` folder, there is a zip file *UT_WI2.zip* containing a shapefile. Make sure that this is unzipped, and then read it into R using the `st_read()` function:
+
+```{r results='hide', message=FALSE, eval = FALSE}
+
+library(sf)
+ut_wi = st_read("./data/UT_WI2/ut_wi2.shp")
+class(ut_wi)
+
+```
+
+We'll need to fix a couple of things to get the rest of the lab to work. First, assign a coordinate reference system to match the polygon data
+
+```{r eval = FALSE}
+
+st_crs(ut_wi) <- 4326
+
+```
+
+And rename the column with the data analyst name: 
+
+```{r results='hide', eval = FALSE}
+
+ut_wi$WI_Analysis_Source <- ut_wi$WI_Analy_2
+
+```
+
+Once this has run, continue the lab following the text 'As before, we can inspect various spatial attributes of the data:'
+
+# Appendix 2: Where to get help
 
 ```{r, child = './get-help.Rmd'}
 ```
@@ -854,3 +924,4 @@ cor(d18O.cv.ok$observed, d18O.cv.ok$var1.pred)^2
 [ggplotID]: http://ggplot2.org
 [rdocID]: http://www.rdocumentation.org
 [stamenID]: http://maps.stamen.com
+[jagsID]: https://mcmc-jags.sourceforge.io

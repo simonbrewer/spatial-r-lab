@@ -933,4 +933,6 @@ rr_rf$aggregate(msr_rmse)
 
 ```
 
+In this case the spatial resampling is slightly better than the original. This suggests that the covariates included in the model account for all of the spatial dependency. 
+
 [mlr3st]: https://mlr3spatiotempcv.mlr-org.com/articles/mlr3spatiotempcv.html

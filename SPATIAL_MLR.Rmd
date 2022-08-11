@@ -211,7 +211,7 @@ print(lrn_rt)
 
 ```
 
-The output of the `print()` function describes this particular algorithm. You should see that the functions used are from the **rpart** package, as well as information about the type of predictions that can be made and the type of features that can be included. This also lists some of the options that can be changed for that particular algorithm. When a learner is created, these are set to default values, and you can see the full list of these by typing:
+The output of the `print()` function describes this particular algorithm. You should see that the functions used are from the **rpart** package, as well as information about the type of predictions that can be made and the type of features that can be included. This also lists some of the options that can be changed for that particular algorithm. Each learner also has a set of hyperparameters that change the way that the algorithm learns on the data, and a key part of machine learning is tuning these to get the best performance. When a learner is created, these hyperparameters are set to default values; to see the full list of these just type:
 
 ```{r}
 
@@ -221,7 +221,7 @@ lrn_rt$param_set
 
 ### Training and testing data
 
-Next we'll create a training and testing dataset. For this first iteration of our model, we'll split the data manually into two sections, with 80% of the observations in the training set and 20% in the testing. In the following code, we: 
+Next we'll create a training and testing dataset. For this first iteration of our model, we'll use a holdout method, where we manually split the data into two sections, with 80% of the observations in the training set and 20% in the testing. In the following code, we: 
 
 - Set the random seed to allow for reproducibility (this is optional)
 - Create a set of indices for the training data using the `sample()` function. The first argument `task_zinc$nrow` gives the range of numbers to randomly sample (between 1 and the number of observations). The second argument `0.8 * task_zinc$nrow` gives the number of random samples to take (80% of the samples)

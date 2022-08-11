@@ -778,3 +778,100 @@ tm_shape(meuse_grid) +
 
 ```
 
+## Spatial cross-validation
+
+One issue with spatial data is that the standard performance metrics can be biased by spatial dependency in the data. A purely random selection results in samples in the training and testing set being located close to together, which means that the test set is not truly independent of the dataset (due to the autocorrelation between values at locations).
+
+To illustrate this, let's plot the distribution of training and testing samples for each fold of the $k$-fold cross-validation:
+
+```{r echo=FALSE, message=FALSE}
+## Plot
+meuse_tmp <- meuse
+
+## 1
+meuse_tmp$fold1 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold1[rsmp_cv$train_set(1)] <- 1
+meuse_tmp$fold1 <- as.factor(meuse_tmp$fold1)
+m1 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold1", size = 0.5)
+
+## 2
+meuse_tmp$fold2 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold2[rsmp_cv$train_set(2)] <- 1
+meuse_tmp$fold2 <- as.factor(meuse_tmp$fold2)
+m2 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold2", size = 0.5)
+
+## 1
+meuse_tmp$fold3 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold3[rsmp_cv$train_set(3)] <- 1
+meuse_tmp$fold3 <- as.factor(meuse_tmp$fold3)
+m3 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold3", size = 0.5)
+
+## 1
+meuse_tmp$fold4 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold4[rsmp_cv$train_set(4)] <- 1
+meuse_tmp$fold4 <- as.factor(meuse_tmp$fold4)
+m4 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold4", size = 0.5)
+
+## 1
+meuse_tmp$fold5 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold5[rsmp_cv$train_set(5)] <- 1
+meuse_tmp$fold5 <- as.factor(meuse_tmp$fold5)
+m5 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold5", size = 0.5)
+
+tmap_arrange(m1, m2, m3, m4, m5)
+```
+
+This lack of independence can result in over-inflated performance metrics. As a reminder, this is the RMSE based on this cross-validation:
+
+```{r}
+
+rr_rf$aggregate(msr_rmse)
+
+```
+
+To get a more robust estimate of the model's performance, we need to use a cross-validation strategy that accounts for this dependency. There are several of these available, depending on the type and distribution of the data, but one of the simplest is 'blocking'. In this strategy, the data are split into spatially contiguous groups of locations. During the cross-validation, one contiguous group is used for testing and the others used for training. (Other methods use spatial buffers or environmental clustering to form the spatial blocks.)
+
+The **mlr3** project includes an extension package for the cross-validation of spatio-temporal data **mlr3spatiotempcv**, including block cross validation. This is not installed as part of **mlr3verse** so you will need to install this separately to run the next steps. More details on the package can be found [here][mlr3st].
+
+```{r eval=FALSE}
+
+install.packages("mlr3spatiotempcv")
+
+```
+
+Now let's load the library:
+
+```{r}
+
+library(mlr3spatiotempcv)
+
+```
+
+For the block cross-validation to work, we need to define a new task that includes the coordinates. Let's start by making a new data frame that includes the variables and coordinates. There's several ways to do this, but here we a) extract the coordinates; b) extract the features into a data frame; c) join the coordinates and the data frame:
+
+```{r}
+
+meuse_crds <- st_coordinates(meuse)
+
+meuse_df <- meuse %>%
+  st_drop_geometry() %>%
+  select(ffreq, dist, soil, lzinc)
+
+meuse_df <- cbind(meuse_df, meuse_crds)
+
+```
+
+
+
+data <- as_data_backend(meuse_df)
+
+task_zinc <- TaskRegrST$new(
+  "spatial_zinc",
+  backend = data, 
+  target = "lzinc",
+  extra_args = list(coordinate_names = c("x", "y"))
+)
+
+```
+
+[mlr3st]: https://mlr3spatiotempcv.mlr-org.com/articles/mlr3spatiotempcv.html

@@ -1,5 +1,10 @@
 ---
 title: "SPATIAL Short Course: Machine learning in R"
+knit: (function(input_file, encoding) {
+  out_dir <- 'docs';
+  rmarkdown::render(input_file,
+ encoding=encoding,
+ output_file=file.path(dirname(input_file), out_dir, 'spatial_mlr.html'))})
 author: | 
   | Simon Brewer
   | Geography Department
@@ -10,7 +15,6 @@ output:
     toc: true
     toc_float: true
     fig_caption: true
-    css: "./style.css"
 header-includes:
    - \usepackage{tabularx}
 ---
@@ -341,12 +345,12 @@ mlr_measures
 
 ```
 
-Note that most methods either begin with `classif.` or `regr.`, indicating what type of task they are suitable for. We create a selected measure with `msr()`, then use the `$score()` method to calculate this based on our prediction. One standard measure for regression methods is the root mean squared error (RMSE, a good measure of the *average* error):
+Note again that each measure begins with the type of task it is designed for (e.g. `classif.` or `regr.`). We create a selected measure with `msr()`, then use the `$score()` method to calculate this based on our predictions for the test dataset. One standard measure for regression methods is the root mean squared error (RMSE, a good measure of the *average* error):
 
 ```{r}
 
-measure = msr("regr.rmse")
-predict_val$score(measure)
+msr_rmse = msr("regr.rmse")
+predict_val$score(msr_rmse)
 
 ```
 
@@ -354,8 +358,8 @@ Another common measure is the mean absolute error (MAE):
 
 ```{r}
 
-measure = msr("regr.mae")
-predict_val$score(measure)
+msr_mae = msr("regr.mae")
+predict_val$score(msr_mae)
 
 ```
 
@@ -363,8 +367,16 @@ We can also investigate the model bias. This should be close to 0, as it is not,
 
 ```{r}
 
-measure = msr("regr.bias")
-predict_val$score(measure)
+msr_bias = msr("regr.bias")
+predict_val$score(msr_bias)
+
+```
+
+You can also calculate a number of these at the same time using R's `c()` function:
+
+```{r eval = FALSE}
+
+predict_val$score(c(msr_rmse, msr_bias))
 
 ```
 
@@ -377,7 +389,6 @@ measure = msr("regr.rmse")
 predict_cal$score(measure)
 
 ```
-
 
 ## Resampling
 
@@ -393,8 +404,8 @@ We will use a $k$-fold cross-validation strategy (`cv`) to test our learning alg
 
 ```{r}
 
-resamp_cv = rsmp("cv", folds = 5)
-print(resamp_cv)
+rsmp_cv = rsmp("cv", folds = 5)
+print(rsmp_cv)
 
 ```
 
@@ -412,8 +423,8 @@ We now run the resampling strategy. To do this, we need to provide a task, so th
 
 ```{r}
 
-resamp_cv$instantiate(task_zinc)
-resamp_cv$iters
+rsmp_cv$instantiate(task_zinc)
+rsmp_cv$iters
 
 ```
 
@@ -421,16 +432,16 @@ To examine any one of the training/test splits, we can obtain the list of indice
 
 ```{r results='hide'}
 
-resamp_cv$train_set(1)
-resamp_cv$test_set(1)
+rsmp_cv$train_set(1)
+rsmp_cv$test_set(1)
 
 ```
 
-Now with a task, a learner and a resampling object, we can call `resample()`, which calibrates the model using the training sets from the resampling strategy, and predicts for the test sets. The argument `store_models = TRUE` tells the function to save each individual model as it is built (for large and complex models, you may want to set this to FALSE to avoid memory issues. 
+Now with a task, a learner and a resampling object, we can call `resample()`, which calibrates the model using teach training set from the resampling strategy, and predicts for the corresponding test set. The argument `store_models = TRUE` tells the function to save each individual model as it is built (for large and complex models, you may want to set this to FALSE to avoid memory issues). 
 
 ```{r}
 
-rr_rt = resample(task_zinc, lrn_rt, resamp_cv, store_models = TRUE)
+rr_rt = resample(task_zinc, lrn_rt, rsmp_cv, store_models = TRUE)
 print(rr_rt)
 
 ```
@@ -448,7 +459,7 @@ We can now calculate the performance measures. Set the measure to the RMSE as be
 
 ```{r}
 
-rr_rt$score(measure)
+rr_rt$score(msr_rmse)
 
 ```
 
@@ -456,7 +467,7 @@ We can also get the aggregate RMSE value:
 
 ```{r}
 
-rr_rt$aggregate(measure)
+rr_rt$aggregate(msr_rmse)
 
 ```
 
@@ -491,19 +502,19 @@ task_zinc = TaskRegr$new(id = "zinc", backend = meuse_df,
 lrn_rt = lrn("regr.rpart")
 
 ## Performance metric
-measure = msr("regr.rmse")
+msr_rmse = msr("regr.rmse")
 
 ## Resampling strategy
-resamp_cv = rsmp("cv", folds = 5)
+rsmp_cv = rsmp("cv", folds = 5)
 
 ## Instantiate
-resamp_cv$instantiate(task_zinc)
+rsmp_cv$instantiate(task_zinc)
 
 ## Run cross-validation
-rr_rt = resample(task_zinc, lrn_rt, resamp_cv, store_models = TRUE)
+rr_rt = resample(task_zinc, lrn_rt, rsmp_cv, store_models = TRUE)
 
 ## Print results
-rr_rt$aggregate(measure)
+rr_rt$aggregate(msr_rmse)
 
 ```
 
@@ -517,12 +528,14 @@ Now we've set up the workflow, it becomes very easy to test different algorithms
 lrn_rf = lrn("regr.ranger")
 
 ## Run resampler
-rr_rf = resample(task_zinc, lrn_rf, resamp_cv, store_models = TRUE)
+rr_rf = resample(task_zinc, lrn_rf, rsmp_cv, store_models = TRUE)
 
 ## Print results
-rr_rf$aggregate(measure)
+rr_rf$aggregate(msr_rmse)
 
 ```
+
+A comparison of the RMSE obtained by the random forest (`r round(rr_rf$aggregate(msr_rmse), 3)`) to the one from the regression tree (`r round(rr_rt$aggregate(msr_rmse), 3)`) , shows a clear improvement with the RF. 
 
 ## Tuning
 
@@ -640,8 +653,8 @@ Here, we'll use a 3-fold cross validation for the inner strategy, and a 5-fold c
 
 ```{r}
 
-resamp_inner = rsmp("cv", folds = 3)
-resamp_outer = rsmp("cv", folds = 5)
+rsmp_inner = rsmp("cv", folds = 3)
+rsmp_outer = rsmp("cv", folds = 5)
 
 ```
 
@@ -650,7 +663,7 @@ Next we'll remake the `AutoTuner` with the inner strategy:
 ```{r}
 
 at_rf = AutoTuner$new(learner = lrn_rf, 
-                      resampling = resamp_inner,
+                      resampling = rsmp_inner,
                       measure = measure, 
                       search_space = tune_ps,
                       terminator = evals,
@@ -663,7 +676,7 @@ And now run `resample` using the `AutoTuner` as the learner (replacing `lrn_rf`)
 ```{r}
 
 rr_rf = resample(task = task_zinc, learner = at_rf, 
-                 resampling = resamp_outer, store_models = TRUE)
+                 resampling = rsmp_outer, store_models = TRUE)
 
 ```
 

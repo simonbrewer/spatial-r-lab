@@ -57,7 +57,6 @@ Start by loading the packages we need to analyze these data:
 
 ```{r message = FALSE}
 
-set.seed(1234)
 library(dplyr)
 library(ggplot2)
 library(sf)
@@ -235,7 +234,7 @@ The `set.seed()` function just re-initializes R's random number generator to the
 
 ```{r}
 
-set.seed(1234)
+set.seed(123)
 train_set = sample(task_zinc$nrow, 0.8 * task_zinc$nrow)
 test_set = setdiff(seq_len(task_zinc$nrow), train_set)
 
@@ -933,6 +932,6 @@ rr_rf$aggregate(msr_rmse)
 
 ```
 
-In this case the spatial resampling is slightly better than the original. This suggests that the covariates included in the model account for all of the spatial dependency. 
+In this case the RMSE from spatial resampling is a little higher than the non-spatial resampling (`~0.45` vs. `0.40`), indicating the potential bias from the spatial dependency. 
 
 [mlr3st]: https://mlr3spatiotempcv.mlr-org.com/articles/mlr3spatiotempcv.html

@@ -841,7 +841,7 @@ install.packages("mlr3spatiotempcv")
 
 Now let's load the library:
 
-```{r}
+```{r warning=FALSE}
 
 library(mlr3spatiotempcv)
 
@@ -861,16 +861,75 @@ meuse_df <- cbind(meuse_df, meuse_crds)
 
 ```
 
+Now we can create a new spatio-temporal task using `TaskRegrST`. This is the same format as the task we made earlier, but we specify which columns contain the coordinates:
 
+```{r}
 
-data <- as_data_backend(meuse_df)
-
-task_zinc <- TaskRegrST$new(
+task_zinc_st <- TaskRegrST$new(
   "spatial_zinc",
-  backend = data, 
+  backend = meuse_df, 
   target = "lzinc",
-  extra_args = list(coordinate_names = c("x", "y"))
+  extra_args = list(coordinate_names = c("X", "Y"))
 )
+
+```
+
+If we now check the list of available resamplers, you should see a few new ones with `spcv` in their names. All of these are different types of spatially robust resampling strategies. We'll use a basic blocking from Brenning et al. (2018) called `spcv_coords`. This is set up in a similar way as before using the `rsmp` function:
+
+```{r}
+
+rsmp_cv_sp = rsmp("spcv_coords", folds = 5)
+rsmp_cv_sp$instantiate(task_zinc_st)
+
+```
+
+To illustrate the difference with the purely random cross-validation, here are maps of the training and testing data for each of the 5 folds:
+
+```{r echo=FALSE, message=FALSE}
+
+## Plot
+meuse_tmp <- meuse
+
+## 1
+meuse_tmp$fold1 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold1[rsmp_cv_sp$train_set(1)] <- 1
+meuse_tmp$fold1 <- as.factor(meuse_tmp$fold1)
+m1 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold1", size = 0.5)
+
+## 2
+meuse_tmp$fold2 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold2[rsmp_cv_sp$train_set(2)] <- 1
+meuse_tmp$fold2 <- as.factor(meuse_tmp$fold2)
+m2 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold2", size = 0.5)
+
+## 1
+meuse_tmp$fold3 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold3[rsmp_cv_sp$train_set(3)] <- 1
+meuse_tmp$fold3 <- as.factor(meuse_tmp$fold3)
+m3 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold3", size = 0.5)
+
+## 1
+meuse_tmp$fold4 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold4[rsmp_cv_sp$train_set(4)] <- 1
+meuse_tmp$fold4 <- as.factor(meuse_tmp$fold4)
+m4 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold4", size = 0.5)
+
+## 1
+meuse_tmp$fold5 <- rep(0, nrow(meuse_tmp))
+meuse_tmp$fold5[rsmp_cv_sp$train_set(5)] <- 1
+meuse_tmp$fold5 <- as.factor(meuse_tmp$fold5)
+m5 <- tm_shape(meuse_tmp) + tm_symbols(col = "fold5", size = 0.5)
+
+tmap_arrange(m1, m2, m3, m4, m5)
+
+```
+
+We can re-run the resampler, with the new task and cross-validation strategy:
+
+```{r}
+
+rr_rf = resample(task_zinc_st, lrn_rf, rsmp_cv_sp, store_models = TRUE)
+rr_rf$aggregate(msr_rmse)
 
 ```
 

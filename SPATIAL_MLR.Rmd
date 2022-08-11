@@ -1,0 +1,751 @@
+---
+title: "SPATIAL Short Course: Machine learning in R"
+author: | 
+  | Simon Brewer
+  | Geography Department
+  | University of Utah
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    fig_caption: true
+    css: "./style.css"
+header-includes:
+   - \usepackage{tabularx}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(png)
+library(grid)
+```
+
+
+## Introduction
+
+In this lab, we will introduce the basics of machine learning in R to predict values for zinc concetration in soil samples from the Meuse floodplain.  
+
+R has a large number of packages for individual machine learning algorithms, but also has a couple of packages that are designed to manage a machine learning workflow. These packages take care of setting up training and testing data, as well as evaluating the models. We will see in later labs that these can also be used to optimize the set up of the model. The package we will use is called **mlr3**, which is a new version of an older package and under active development. **mlr3** consists of a set of individual packages that cover different aspects of machine learning (including working with spatial data). You can install all the packages by installing **mlr3verse**. 
+
+As a reminder, packages can be installed in RStudio by going to the 'Packages' tab and clicking on the [Install] button, or from the menu [Tools]-> [Install packages...]. You can also install these from the console window by typing
+
+```{r eval=FALSE}
+
+install.packages("mlr3verse")
+
+```
+
+More details about the **mlr3** package and the associated project can be found [here][mlr3], including a very detailed manual with lots of extended examples. 
+
+You should also install the following packages to help in managing data and visualizing your results. 
+
+- **dplyr**
+- **ggplot2**
+- **sf**
+- **tmap**
+- **vip**
+- **pdp**
+
+## Libraries and data 
+
+Start by loading the packages we need to analyze these data:
+
+```{r message = FALSE}
+
+set.seed(1234)
+library(dplyr)
+library(ggplot2)
+library(sf)
+library(tmap)
+library(mlr3verse)
+
+```
+
+Next we'll load some data. We'll use the Meuse river soil sample data set. This is small dataset of about 150 samples from the Netherlands, and is available in the shapefile *meuse.shp*. The data are in a specific coordinate reference system for the Netherlands, so let's start by loading this data and setting the CRS:
+
+```{r}
+
+meuse_crs <- 28992
+
+meuse <- st_read("./data/meuse/meuse.shp")
+st_crs(meuse) <- meuse_crs
+
+```
+
+The variable we are interested in is the concentration of zinc (`zinc`). If we plot this as a histogram, you'll see that the data are right-skewed:
+
+```{r}
+
+ggplot(meuse, aes(x = zinc)) +
+  geom_histogram() +
+  scale_x_continuous("Zinc (ppm)")
+
+```
+
+As the zinc values are right-skewed, let's log-transform them to normalize and stablize the variance:
+
+```{r}
+
+meuse$lzinc <- log(meuse$zinc)
+
+ggplot(meuse, aes(x = lzinc)) +
+  geom_histogram() +
+  scale_x_continuous("Zinc (log ppm)")
+
+```
+
+For this example, we'll only use 3 features to predict the zinc concentrations:
+
+- `dist`: distance to river (km)
+- `ffreq`: flood frequency class
+- `soil`: soil class
+
+To simplify things for the analysis, we'll select just these columns. We also remove the geometry from the `sf` object and convert the categorical data to factors:
+
+```{r}
+
+meuse_df <- meuse %>%
+  st_drop_geometry() %>%
+  select(dist, ffreq, soil, lzinc)  %>%
+  mutate(ffreq = as.factor(ffreq),
+         soil = as.factor(soil))
+
+```
+
+In addition to the observed data, we also need a grid for predictions. We'll use a pre-made grid in *meusegrid.shp*:
+
+```{r}
+
+meuse_grid <- st_read("./data/meuse/meusegrid.shp")
+st_crs(meuse_grid) <- meuse_crs
+names(meuse_grid)
+
+```
+
+Note that we have values for the three features for each point on the Meuse grid - this is important for predictions. 
+
+## The **mlr3** package
+
+Now we turn to the **mlr3** package to set up a machine learning framework that will be based on the same model. This framework consists of the following steps:
+
+```{r fig.width=6.5, fig.height=4., echo=FALSE}
+
+img <- readPNG("./images/ml_abstraction.png")
+grid.raster(img)
+
+```
+
+- Define a *task*: this describes the dataset, the response variable as well as any transformations of the data that are required 
+- Select a *learner*: this one of a set of machine learning algorithms that will be used to build the model
+- Set up the *training* and *testing* datasets to calibrate and validate the model, respectively
+- Define a *performance measure* to assess the skill of the model
+
+Start by loading the package:
+
+```{r}
+
+library(mlr3verse)
+
+```
+
+## mlr3 workflow
+
+### Tasks
+
+**mlr3** defines two basic tasks: regression (for continuous variables) and classification (for categorical or binary variable). We'll use the first of these with the zinc data, as the values are continuous. A regression task can be created using the `TaskRegr()` function (use `TaskClassif()` for a classification task). In this function, we specify:
+
+- A label to describe the task
+- A `backend` defining the data source (here the `meuse_df` data frame). Note that is quite flexible and can also include SQL databases and cloud data APIs
+- A `target` defining the response variable (i.e. the thing we want to model)
+
+```{r results='hide'}
+
+task_zinc = TaskRegr$new(id = "zinc", backend = meuse_df, 
+                            target = "lzinc")
+print(task_zinc)
+
+```
+
+Tasks have a series of attributes that allow you to investigate the characteristics of the data:
+
+```{r results='hide'}
+
+## Number of observations
+task_zinc$nrow
+## Number of features
+task_zinc$ncol
+# See all data
+task_zinc$data()
+# retrieve data for rows with ids 1, 51, and 101
+task_zinc$data(rows = c(1, 51, 101))
+## Names of features 
+task_zinc$feature_names
+## Name of target variable
+task_zinc$target_names
+
+```
+
+### Learners
+
+The base **mlr3** package comes a large number of machine learning algorithms or *learners*. To see the list of available learners, type:
+
+```{r}
+
+mlr_learners
+
+```
+
+You should see that each learner is defined by the type of learner and the name of the algorithm. Types of learner include:
+
+- `classif`: for classification algorithms
+- `regr`: for regression algorithms
+- `surv`: for survival analysis
+
+Note that this package does not contain the algorithms, but acts to link a diverse range of R packages that include the machine learning methods. To get a better idea of how this works, let's select a regression algorithm (a regression tree) using the `lrn()` function:
+
+```{r}
+
+lrn_rt = lrn("regr.rpart")
+print(lrn_rt)
+
+```
+
+The output of the `print()` function describes this particular algorithm. You should see that the functions used are from the **rpart** package, as well as information about the type of predictions that can be made and the type of features that can be included. This also lists some of the options that can be changed for that particular algorithm. When a learner is created, these are set to default values, and you can see the full list of these by typing:
+
+```{r}
+
+lrn_rt$param_set
+
+```
+
+### Training and testing data
+
+Next we'll create a training and testing dataset. For this first iteration of our model, we'll split the data manually into two sections, with 80% of the observations in the training set and 20% in the testing. In the following code, we: 
+
+- Set the random seed to allow for reproducibility (this is optional)
+- Create a set of indices for the training data using the `sample()` function. The first argument `task_zinc$nrow` gives the range of numbers to randomly sample (between 1 and the number of observations). The second argument `0.8 * task_zinc$nrow` gives the number of random samples to take (80% of the samples)
+- Create a set of indices for the testing data as the indices *not* used in the training set
+
+The `set.seed()` function just re-initializes R's random number generator to the same value. This should ensure that you always get the same random split. You can skip this line if you'd like to see how much the results might vary if you have a different split into training and testing datasets. 
+
+```{r}
+
+set.seed(1234)
+train_set = sample(task_zinc$nrow, 0.8 * task_zinc$nrow)
+test_set = setdiff(seq_len(task_zinc$nrow), train_set)
+
+```
+
+To see how many observations are in each set, use the `length()` function:
+
+```{r}
+
+length(train_set)
+length(test_set)
+
+```
+
+Now let's train our first model. The learner that we just created has a variable (`model`) that contains the model results. At the moment, this is empty:
+
+```{r results='hide'}
+
+lrn_rt$model
+
+```
+
+Now train the model by calling the `$train()` method of our learner. Note that we supply the `task` created earlier, and an argument giving the indices of the observations to be used in training:
+
+```{r}
+
+lrn_rt$train(task_zinc, row_ids = train_set)
+
+```
+
+Now `model` contains the model output (the series of splits in the regression tree). 
+
+```{r}
+
+lrn_rt$model
+
+```
+
+You can visualize this result by plotting the output:
+
+```{r eval=FALSE}
+
+plot(lrn_rt$model)
+text(lrn_rt$model)
+
+```
+
+A better visualization can be made with the **rpart.plot** package (you'll need to install this separately):
+
+```{r message=FALSE, echo=FALSE}
+
+library(rpart.plot)
+
+```
+
+```{r warning=FALSE}
+
+prp(lrn_rt$model)
+
+```
+
+### Prediction
+
+Prediction in **mlr3** is fairly straightforward. We use our now-trained learner and the `$predict()` method. We specify new data by using the testing set indices created above. 
+
+```{r}
+
+predict_val = lrn_rt$predict(task_zinc, row_ids = test_set)
+print(predict_val)
+
+```
+
+The `print()` function displays the first few rows of these data. Note that one column holds the `truth` - the observed value, and one holds the predicted value (`response`). The **mlr3viz** package contains functions for visualizing various aspects of your model. Here, we use the `autoplot()` function to display the predicted values of the test set against the truth:
+
+```{r}
+
+library(mlr3viz)
+autoplot(predict_val)
+
+```
+
+Each point represents one observation from the test set. The $x$-axis is the predicted value, and the $y$-axis the observed value. The spread of the cloud gives us some indication about the predictive skill of the learner; wider suggests a poorer performance. Note the 'stepped' predictions as we are using a regression tree. 
+
+### Performance measures
+
+This plot allows us to visualize how well the model has predicted for the test data, but we also need to quantify this using a performance measure. This will eventually allow us to compare different learning algorithms or different setups of the same algorithm to see which is best. Not too surprisingly then, **mlr3** comes with a whole suite of different measures that we can use. To see the full list, type:
+
+```{r}
+
+mlr_measures
+
+```
+
+Note that most methods either begin with `classif.` or `regr.`, indicating what type of task they are suitable for. We create a selected measure with `msr()`, then use the `$score()` method to calculate this based on our prediction. One standard measure for regression methods is the root mean squared error (RMSE, a good measure of the *average* error):
+
+```{r}
+
+measure = msr("regr.rmse")
+predict_val$score(measure)
+
+```
+
+Another common measure is the mean absolute error (MAE):
+
+```{r}
+
+measure = msr("regr.mae")
+predict_val$score(measure)
+
+```
+
+We can also investigate the model bias. This should be close to 0, as it is not, it suggests there's a tendency to under-estimate with the model. 
+
+```{r}
+
+measure = msr("regr.bias")
+predict_val$score(measure)
+
+```
+
+Note that we can also use these measure to assess the calibration (the goodness-of-fit). For this, we run a second prediction for the training dataset, and calculate the RMSE. 
+
+```{r}
+
+predict_cal = lrn_rt$predict(task_zinc, row_ids = train_set)
+measure = msr("regr.rmse")
+predict_cal$score(measure)
+
+```
+
+
+## Resampling
+
+So far, we have built and tested our model on a single split of the data (the hold-out method). However, if the training and testing datasets are not well set up, the estimates of model performance can be biased. There are several more exhaustive resampling strategies that can be used instead, and we will implement one of these now. To see the list of available strategies, type:
+
+```{r}
+
+mlr_resamplings
+
+```
+
+We will use a $k$-fold cross-validation strategy (`cv`) to test our learning algorithm. The resampler is created using the `rsmp()` function. By default, the `cv` resampler uses 10 folds, but we will adjust this to use 5, by specifying the value of `folds`:
+
+```{r}
+
+resamp_cv = rsmp("cv", folds = 5)
+print(resamp_cv)
+
+```
+
+Note that the `Instantiated` field is set to FALSE. This simply shows that the resampler has not yet been set up.
+
+We could have created the hold-out method used above, by setting the resampler to:
+
+```{r eval=FALSE}
+
+rsmp("holdout", ratio = 0.8)
+
+```
+
+We now run the resampling strategy. To do this, we need to provide a task, so that the dataset can be divided up appropriately. This is carried out by calling the `$instantiate()` method, and the resulting indices for training and testing for the different folds are stored in the `resampling` object:
+
+```{r}
+
+resamp_cv$instantiate(task_zinc)
+resamp_cv$iters
+
+```
+
+To examine any one of the training/test splits, we can obtain the list of indices or row numbers as follows:
+
+```{r results='hide'}
+
+resamp_cv$train_set(1)
+resamp_cv$test_set(1)
+
+```
+
+Now with a task, a learner and a resampling object, we can call `resample()`, which calibrates the model using the training sets from the resampling strategy, and predicts for the test sets. The argument `store_models = TRUE` tells the function to save each individual model as it is built (for large and complex models, you may want to set this to FALSE to avoid memory issues. 
+
+```{r}
+
+rr_rt = resample(task_zinc, lrn_rt, resamp_cv, store_models = TRUE)
+print(rr_rt)
+
+```
+
+The output tells us that the resampler ran well, with no errors or warnings. If errors or warnings occur, you can examine them using the appropriate method:
+
+```{r results='hide'}
+
+rr_rt$errors
+rr_rt$warnings
+
+```
+
+We can now calculate the performance measures. Set the measure to the RMSE as before, then use the `$score` method (as before) to see the results for each individual fold (in the last column of output:
+
+```{r}
+
+rr_rt$score(measure)
+
+```
+
+We can also get the aggregate RMSE value:
+
+```{r}
+
+rr_rt$aggregate(measure)
+
+```
+
+As we saved all the individual models, we can explore these now. These are held in an object `$learners`:
+
+```{r results='hide'}
+
+rr_rt$learners
+
+```
+
+If you want to see an individual model, you can reference it by it's fold number:
+
+```{r}
+
+rr_rt$learners[[1]]$model
+
+```
+
+And you can plot this using the code given above.
+
+## Summary
+
+A lot of the code above is there to help you understand the different objects and processes that **mlr3** creates. If all you need to do is run a cross-validation, then the workflow boils down to the following steps:
+
+```{r eval=FALSE}
+
+## Task
+task_zinc = TaskRegr$new(id = "zinc", backend = meuse_df, 
+                            target = "lzinc")
+## Learner
+lrn_rt = lrn("regr.rpart")
+
+## Performance metric
+measure = msr("regr.rmse")
+
+## Resampling strategy
+resamp_cv = rsmp("cv", folds = 5)
+
+## Instantiate
+resamp_cv$instantiate(task_zinc)
+
+## Run cross-validation
+rr_rt = resample(task_zinc, lrn_rt, resamp_cv, store_models = TRUE)
+
+## Print results
+rr_rt$aggregate(measure)
+
+```
+
+## Random forest
+
+Now we've set up the workflow, it becomes very easy to test different algorithms on the same task. To set up a random forest, simply create a new `learner` with `regr.ranger` (this uses the **ranger** package for random forests which is a fast, parallel implementation of RFs):
+
+```{r}
+
+## Learner
+lrn_rf = lrn("regr.ranger")
+
+## Run resampler
+rr_rf = resample(task_zinc, lrn_rf, resamp_cv, store_models = TRUE)
+
+## Print results
+rr_rf$aggregate(measure)
+
+```
+
+## Tuning
+
+Machine learning methods have a large number of hyper parameters and benefit from tuning. We can do this using the **mlr3tuning** package. There are several steps here:
+
+### 1. Define the task, learner and measure
+
+We'll use the definitions from the previous section (with the random forest)
+
+### 2. Define the parameters to test 
+
+We next need to define the parameter set (the set of values for each hyperparameter we want to tune). Parameter sets can be generated using the **paradox** package. This should have been installed along with **mlr3**, so load this now. 
+
+```{r}
+
+library(paradox)
+
+```
+
+Next check the available parameters for our learner (random forest)
+
+```{r}
+
+lrn_rf$param_set
+
+```
+
+This table also gives the type of parameter (e.g. double precision or integer), the lower and upper bounds and the default value. We'll test values for the number of trees (`num.trees`) between 100 and 1000, and the minimum number of observations to considering partitioning a node (`min.node.size`) from 1 to 10. We create a new `ParamSet` holding the individual hyperparameter ranges. Each range is specified using either `ParamInt` or `ParamDbl` to match the type shown above, as well as a lower and upper bound. 
+
+```{r}
+
+tune_ps = ParamSet$new(list(
+  ParamInt$new("num.trees", lower = 100, upper = 1000),
+  ParamInt$new("min.node.size", lower = 1, upper = 10)
+))
+tune_ps
+
+```
+
+### 3. Define a stopping condition 
+
+Next we define one or more stopping criteria for the tuning. This is largely to prevent tuning for highly complex algorithms runnign for a long time. The available stopping criteria include:
+
+- limiting clock time
+- limiting the number of iterations or evaluations 
+- stopping when a specific level of performance has been reached
+- stopping when performance no longer improves by more than some amount
+
+We'll use the second of these. The function to set the terminator is `term()`, and we set the number of evaluations to 50, which is fairly low, so feel free to increase this if you have the time.
+
+```{r}
+
+evals = trm("evals", n_evals = 50)
+
+```
+
+### 4. Define the `Tuner`
+
+Now, we set up a sampling strategy for searching among different hyperparameter values. There are a couple of options here; we will use a grid search, where the argument `resolution` gives the number of steps between the lower and upper bounds defined in our `ParamSet`. For our parameters, this will set a grid that runs from 100 to 1000 in steps of 100 for `num.trees`, and from 1 to 10 in steps of 1 for `min.node.size`. 
+
+```{r}
+
+tuner = tnr("grid_search", resolution = 10)
+
+```
+
+### 5. Run the tuner
+
+The **mlr3tuning** package offers a couple of ways to tune. Either by first running the tuning, then using these parameters to train the final model, or combining these using `AutoTuner()`. We'll use the second of these here - it's a little neater, and has one other advantage as we will see later. 
+
+First create a new `AutoTuner` using the various other functions and parameters that we have just defined:
+
+```{r}
+
+at_rf = AutoTuner$new(learner = lrn_rf, 
+                      resampling = rsmp("holdout"),
+                      measure = measure, 
+                      search_space = tune_ps,
+                      terminator = evals,
+                      tuner = tuner)
+
+```
+
+Note that we use a holdout method in the AutoTuner to split the data (this can be esaily changed to a $k$-fold by setting it to `cv`). This will be used to assess how the model's skill changes as we vary the parameters. Each time it will evaluate the measure on the holdout test set. Whichever parameter set gives the best performance will then be automatically used to train a final model. The `AutoTuner` object inherits from the `Learner` methods we have previously seen, so to tune and train the model, just type:
+
+```{r echo=FALSE}
+lgr::get_logger("mlr3")$set_threshold("warn")
+lgr::get_logger("bbotk")$set_threshold("warn")
+```
+
+```{r}
+
+at_rf$train(task_zinc)
+
+```
+
+You'll see quite a lot of output showing some of the results from each tuning iteration in each fold. You see the results in `at_rf$learner`, showing a value of `num.trees` of `r at_rf$learner$model$control$num.trees` and `min.node.size` of `r at_rf$learner$model$control$min.node.size`.
+
+```{r results='hide'}
+
+at_rf$learner
+
+```
+
+## Nested resampling
+
+The previous code has trained a model, but it has not evaluated it. While this used a resampling strategy (the holdout), this is only used to select the best value of the hyperparameters. To evaluate the final trained model, we need to use an independent dataset. Fortunately, this is quite easy to set up using the `AutoTuner`. 
+
+To understand the following code, we need to define the inner vs. the outer resampling strategy. 
+
+- The outer strategy divides the dataset into a training and testing data set, where the test set is used to evaluate the predictive skill of the model
+- The inner strategy takes the training data, and divides it into two new sets to tune the model - one set to train for each combination of parameters, and one set to evaluate and help select the best values of these parameters
+
+Here, we'll use a 3-fold cross validation for the inner strategy, and a 5-fold cross validation for the outer. 
+
+```{r}
+
+resamp_inner = rsmp("cv", folds = 3)
+resamp_outer = rsmp("cv", folds = 5)
+
+```
+
+Next we'll remake the `AutoTuner` with the inner strategy:
+
+```{r}
+
+at_rf = AutoTuner$new(learner = lrn_rf, 
+                      resampling = resamp_inner,
+                      measure = measure, 
+                      search_space = tune_ps,
+                      terminator = evals,
+                      tuner = tuner)
+
+```
+
+And now run `resample` using the `AutoTuner` as the learner (replacing `lrn_rf`), and the outer resampling strategy. This will take a minute or so to run - remember that this is dividing the dataset 5 times and then tuning a model using a 3 fold evaluation and 50 evaluations steps for each of those iterations. 
+
+```{r}
+
+rr_rf = resample(task = task_zinc, learner = at_rf, 
+                 resampling = resamp_outer, store_models = TRUE)
+
+```
+
+This will take a little while to run; remember that this is dividing the original data set up three times, then for each one tuning the parameters across the parameter set/resolution. You can see the selected set of parameters for each of the outer cross-validation folds as follows:
+
+```{r}
+
+extract_inner_tuning_results(rr_rf)
+
+```
+
+```{r echo=FALSE, results='hide'}
+
+res <- extract_inner_tuning_results(rr_rf)
+best_fold <- which.min(res$regr.rmse)
+
+```
+
+Fold `r best_fold` has the lowest RMSE, with `r res$num.trees[best_fold]` trees and `r res$min.node.size[best_fold]` observations in the final nodes. The overall RMSE across all 5 folds is `r round(mean(res$regr.rmse), 2)` with a standard deviation of `r round(sd(res$regr.rmse), 2)`.
+
+## Final model
+
+Now we've estimated the best model hyperparameters and obtained a cross-validated performance score, then next step is to build a final model. Here, we create a new learner with the chosen parameter values and train it on the full dataset:
+
+```{r}
+
+lrn_rf = lrn("regr.ranger", 
+             num.trees = 300, 
+             min.node.size = 2,
+             importance = "permutation")
+lrn_rf$train(task_zinc)
+
+```
+
+```{r}
+
+lrn_rf$model
+
+```
+
+### Variable importance plots
+
+Next we'll plot the permutation-based variable importance for this model. As a reminder, variable importance is a measure of how much worse a model becomes when we scramble the values of one of the features. The model is used to predict the outcome for some test data (here the out-of-bag samples) twice: once with the original values of the feature and once with randomly shuffled values. If there is a large difference in the skill of the model, this feature is important in controlling the outcome. We'll use the `vip()` function from the **vip** to show and then plot the variable importance scores. 
+
+```{r}
+
+library(vip)
+vip(lrn_rf$model)
+
+```
+
+### Partial dependency plots
+
+We can look at the form of the relationship between the zinc concentration and any of the features using a partial dependency plot. This shows changes in the outcome across the range of some feature (with all other features held constant). Here, we'll use the `partial()` function from the the **pdp** package to produce the plot. As arguments, this requires the model, the feature that you want the dependency on, the set of data used to produce the model. Here's we'll make one for the 'distance to river' variable:
+
+```{r}
+
+library(pdp)
+partial(lrn_rf$model, pred.var = "dist", 
+        train = task_zinc$data(),
+        plot = TRUE)
+
+```
+
+### Predictions at new locations
+
+Now we have our final tuned and tested model, we can use it to predict at new locations. Earlier, we loaded a shapefile with regular grid points over the flood plain (`meuse_grid`). If you check this now, you'll see that it has values for distance to river, soil and flood frequency:
+
+```{r}
+
+meuse_grid
+
+```
+
+We can use this with the `predict_newdata()` function/method in the learner (`lrn_rf`):
+
+
+```{r results='hide'}
+
+lrn_rf$predict_newdata(meuse_grid)
+
+```
+
+And the predicted values are in the `response` column. We can attach this to the `muse_grid` object, which will allow us to visualize the results:
+
+
+```{r}
+
+meuse_grid$yhat = lrn_rf$predict_newdata(meuse_grid)$response
+
+```
+
+And plot with **tmap**:
+
+```{r}
+
+tm_shape(meuse_grid) +
+  tm_symbols(col = "yhat", size = 0.1, border.lwd = NA)
+
+```
+

@@ -315,9 +315,25 @@ autoplot(predict_val)
 
 Each point represents one observation from the test set. The $x$-axis is the predicted value, and the $y$-axis the observed value. The spread of the cloud gives us some indication about the predictive skill of the learner; wider suggests a poorer performance. Note the 'stepped' predictions as we are using a regression tree. 
 
+If you want to use your model to predict for new data, you need to change `predict` for `predict_newdata`. Here, we'll use the regression tree and the gridded Meuse data set to make and plot the predicted values (you'll notice that this is clearly dominated by distance to river):
+
+```{r}
+
+pred_rt <- lrn_rt$predict_newdata(meuse_grid)
+
+```
+
+```{r}
+
+meuse_grid$yhat_rt <- pred_rt$response
+tm_shape(meuse_grid) +
+  tm_symbols(col = "yhat_rt", size = 0.1, border.lwd = NA)
+
+```
+
 ### Performance measures
 
-This plot allows us to visualize how well the model has predicted for the test data, but we also need to quantify this using a performance measure. This will eventually allow us to compare different learning algorithms or different setups of the same algorithm to see which is best. Not too surprisingly then, **mlr3** comes with a whole suite of different measures that we can use. To see the full list, type:
+In the previous section, we were able to visualize how well the model worked with both the test data and new data. But we also need to quantify this using a performance measure. This will eventually allow us to compare different learning algorithms or different setups of the same algorithm to see which is best. Not too surprisingly then, **mlr3** comes with a whole suite of different measures that we can use. To see the full list, type:
 
 ```{r}
 

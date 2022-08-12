@@ -873,7 +873,7 @@ task_zinc_st <- TaskRegrST$new(
 
 ```
 
-If we now check the list of available resamplers, you should see a few new ones with `spcv` in their names. All of these are different types of spatially robust resampling strategies. We'll use a basic blocking from Brenning et al. (2018) called `spcv_coords`. This is set up in a similar way as before using the `rsmp` function:
+If we now check the list of available resamplers, you should see a few new ones with `spcv` in their names. All of these are different types of spatially robust resampling strategies. We'll use a basic blocking from Brenning et al. (2012) called `spcv_coords`. This is set up in a similar way as before using the `rsmp` function:
 
 ```{r}
 
@@ -933,5 +933,15 @@ rr_rf$aggregate(msr_rmse)
 ```
 
 In this case the RMSE from spatial resampling is a little higher than the non-spatial resampling (`~0.45` vs. `0.40`), indicating the potential bias from the spatial dependency. 
+
+## Geographical random forest
+
+Increased interest in the use of machine learning with spatial data has led to the development of some methods that can leverage the 'spatial' aspect of these data. Here, we'll look at one of the simplest of these methods: geographical random forests (GRF; Georganos et al., 2019). Rather than building a single random forest for the whole dataset, this builds many local models for different regional subsets of data. It achieves this using a moving window approach. A window is placed around each observation and all the observations that fall into the window are used to build a random forest for that point. Once run, the  
+
+## Citations
+
+Brenning, A. 2012. Spatial cross-validation and bootstrap for the assessment of prediction rules in remote sensing: The R package sperrorest. IGARSS 2012: 5372-5375
+
+Georganos, S., Grippa, T. et al. 2019. Geographical Random Forests: A Spatial Extension of the Random Forest Algorithm to Address Spatial Heterogeneity in Remote Sensing and Population Modelling, Geocarto International, DOI: 10.1080/10106049.2019.1595177
 
 [mlr3st]: https://mlr3spatiotempcv.mlr-org.com/articles/mlr3spatiotempcv.html

@@ -28,7 +28,7 @@ library(grid)
 
 ## Introduction
 
-In this lab, we will introduce the basics of machine learning in R to predict values for zinc concetration in soil samples from the Meuse floodplain.  
+In this lab, we will introduce the basics of machine learning in R to predict values for zinc concentration in soil samples from the Meuse floodplain.  
 
 R has a large number of packages for individual machine learning algorithms, but also has a couple of packages that are designed to manage a machine learning workflow. These packages take care of setting up training and testing data, as well as evaluating the models. We will see in later labs that these can also be used to optimize the set up of the model. The package we will use is called **mlr3**, which is a new version of an older package and under active development. **mlr3** consists of a set of individual packages that cover different aspects of machine learning (including working with spatial data). You can install all the packages by installing **mlr3verse**. 
 
@@ -165,7 +165,7 @@ library(mlr3verse)
 ```{r results='hide'}
 
 task_zinc = TaskRegr$new(id = "zinc", backend = meuse_df, 
-                            target = "lzinc")
+                         target = "lzinc")
 print(task_zinc)
 
 ```
@@ -496,7 +496,7 @@ A lot of the code above is there to help you understand the different objects an
 
 ## Task
 task_zinc = TaskRegr$new(id = "zinc", backend = meuse_df, 
-                            target = "lzinc")
+                         target = "lzinc")
 ## Learner
 lrn_rt = lrn("regr.rpart")
 
@@ -868,7 +868,7 @@ task_zinc_st <- TaskRegrST$new(
   "spatial_zinc",
   backend = meuse_df, 
   target = "lzinc",
-  extra_args = list(coordinate_names = c("X", "Y"))
+  coordinate_names = c("X", "Y")
 )
 
 ```
@@ -936,7 +936,66 @@ In this case the RMSE from spatial resampling is a little higher than the non-sp
 
 ## Geographical random forest
 
-Increased interest in the use of machine learning with spatial data has led to the development of some methods that can leverage the 'spatial' aspect of these data. Here, we'll look at one of the simplest of these methods: geographical random forests (GRF; Georganos et al., 2019). Rather than building a single random forest for the whole dataset, this builds many local models for different regional subsets of data. It achieves this using a moving window approach. A window is placed around each observation and all the observations that fall into the window are used to build a random forest for that point. Once run, the  
+Increased interest in the use of machine learning with spatial data has led to the development of some methods that can leverage the 'spatial' aspect of these data. Here, we'll look at one of the simplest of these methods: geographical random forests (GRF; Georganos et al., 2019). Rather than building a single random forest for the whole dataset, this builds many local models for different regional subsets of data. It achieves this using a moving window approach. A window is placed around each observation and all the observations that fall into the window are used to build a random forest for that point. The output therefore consists of as many models as observations, and can be used to explore how the variable importance scores vary in space. It can also be used to make predictions at any new location by selecting the nearest model. Here's we'll build a simple model (without cross-validation) as a demonstration.
+
+First load the library (you'll need to install this if it is not currently on your machine):
+
+```{r message=FALSE, warning=FALSE}
+
+library(SpatialML)
+
+```
+
+Next, we can fit the GRF. This requires a dataframe as input, a standard R model formula to identify the outcome (`lzinc`) and the features, and a second dataframe with the coordinates for each observation (`X` and `Y`). We also set the following arguments:
+
+- `kernel = "adaptive"`: this uses a variable sized window around each location. The alternative is `"fixed"` 
+- `bw = 40`: this uses the 40 closest observations to build each model (more would be better but also more time consuming). If the `kernel` is fixed, this instead describes the radius of the window in spatial units
+- `forests = TRUE`: this will save all individual models that are made. This can be memory intensive for larger datasets
+- `print.results = FALSE`: this reduces the amount of output while running
+
+```{r eval = FALSE}
+
+grf.fit <- grf(lzinc ~ dist + soil + ffreq, meuse_df,
+               coords = meuse_df[, c('X', 'Y')],
+               kernel = "adaptive", bw = 40,
+               forests = TRUE,
+               print.results = FALSE)
+
+```
+
+
+```{r echo=FALSE}
+
+load("grf.RData")
+
+```
+
+We can visualize some of the output by appending back to our spatial dataframe (`meuse`):
+
+- The local R2:
+
+```{r}
+
+meuse$locRsq <- grf.fit$LGofFit$LM_Rsq100
+tm_shape(meuse) + tm_symbols(col = "locRsq", size = 0.5)
+
+```
+
+- The importance scores:
+
+```{r}
+
+meuse$vip_dist <- grf.fit$Local.Variable.Importance$dist
+meuse$vip_soil <- grf.fit$Local.Variable.Importance$soil
+meuse$vip_ffreq <- grf.fit$Local.Variable.Importance$ffreq
+
+m1 <- tm_shape(meuse) + tm_symbols(col = "vip_dist", size = 0.5)
+m2 <- tm_shape(meuse) + tm_symbols(col = "vip_soil", size = 0.5)
+m3 <- tm_shape(meuse) + tm_symbols(col = "vip_ffreq", size = 0.5)
+
+tmap_arrange(m1, m2, m3)
+
+```
 
 ## Citations
 

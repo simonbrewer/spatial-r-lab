@@ -632,7 +632,7 @@ We can do the same with the polygon data using the `aggregate()` function. The f
 
 ```{r fig.keep='none'}
 
-tmp = aggregate(win_d2h, ut_cnty, FUN = "mean")
+tmp = aggregate(win_d2h, ut_cnty, FUN = mean)
 ut_cnty$mean_d2h = tmp$d2H
 plot(ut_cnty["mean_d2h"])
 
@@ -642,7 +642,7 @@ plot(ut_cnty["mean_d2h"])
 
 The basic plotting function provided with the **sf** package provides a simple way to map out data with a simple color scale (e.g. `plot(ut_wi["d18O"])`). However, it is relatively inflexible if you want to make more complex maps. An add-on package (**tmap**) provides several functions to improve on this. This builds maps as a series of layers, with different symbols or shadings added for each layer. You can then add further map objects (e.g. scale bar, north arrow). Make sure this package is installed, then try working through the following examples:
 
-```{r}
+```{r message=FALSE}
 
 library(tmap)
 tm_shape(ut_cnty) +

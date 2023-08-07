@@ -755,7 +755,7 @@ Next, we'll make up a grid of points for predictions. We could use the grid we r
 ```{r message=FALSE}
 
 mybbox = st_bbox(slc)
-grid = st_as_stars(mybbox, dx = 0.001, dy = 0.001)
+grid = st_as_stars(mybbox, dx = 0.01, dy = 0.01)
 st_crs(grid) = 4326
 grid = grid[slc, ]
 

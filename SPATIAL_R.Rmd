@@ -391,6 +391,8 @@ For this lab, we will need the following packages:
 
 We will also use a package developed by Gabe to access and analyze water isotope data called **isoWater**. This depends on an additional piece of software for Gibbs sampling called JAGS. Again, this is preinstalled on the lab computers, but you will need to install if you are working on your own laptop. You can download installers for JAGS [here][jagsID]. Once you've successfully installed this, you can then install the **isoWater** package in R using the methods described above. If you run into any problems during these installation steps, please ask for help!
 
+**IF YOU ARE USING MAC OSX THIS LIBRARY MAY NOT INSTALL. IF SO, FOLLOW THE ADDITIONAL INSTRUCTIONS BELOW MARKED `MACOSX`**
+
 Once installed, you will need to load each package into R's workspace in order to use it using the `library()` function. For the moment, we'll just load the **sf** package:
 
 ```{r eval=TRUE, message=FALSE}
@@ -464,7 +466,7 @@ Once set, the CRS is printed in WKT format, a standard for spatial data.
 
 Next, we'll load some isotope data using the **isoWater** package. If you were not able to install this for any reason, see the appendix below for code to read an earlier version of this data from a shapefile. Start by loading the library
 
-```{r message = FALSE}
+```{r message = FALSE, eval = FALSE}
 
 library(isoWater)
 
@@ -472,7 +474,7 @@ library(isoWater)
 
 Now use the function `wiDB_data()` to download the data. Here we restrict the data to stream and river samples from Utah. See `help(wiDB_data)` for other criteria that can be used to refine your search. 
 
-```{r}
+```{r eval = FALSE}
 
 ut_wi_db = wiDB_data(states = "UT", types = "River_or_stream")
 
@@ -480,9 +482,16 @@ ut_wi_db = wiDB_data(states = "UT", types = "River_or_stream")
 
 This will create a new R list object (`ut_wi`) containing both the data and metadata relating to the provenance of the data. The data can be converted to an `sf` object using `st_as_sf()`, by providing the name of the dataframe and the columns containing the x and y coordinates and (optionally) the CRS. 
 
-```{r}
 
-ut_wi <- st_as_sf(ut_wi_db$data, 
+```{r eval = FALSE}
+
+ut_wi <- st_read()
+
+```
+
+```{r eval = FALSE}
+
+ut_wi <- st_as_sf(ut_wi_db$data,
                   coords = c("Longitude", "Latitude"),
                   crs = 4326)
 
@@ -492,9 +501,12 @@ As before, we can inspect various spatial attributes of the data:
 
 ```{r message=FALSE, results='hide'}
 
+ut_wi <- st_read("data/UT_WI2/ut_wi2.shp")
+
 st_bbox(ut_wi)
-st_coordinates(ut_wi)
-st_crs(ut_wi)
+# st_coordinates(ut_wi)
+st_crs(ut_wi) <- 4326
+ut_wi$WI_Analysis_Source <- ut_wi$WI_Analy_2
 
 ```
 
@@ -714,6 +726,20 @@ tm_shape(win_d2h) +
 
 ```
 
+Adding an overlay of the Utah counties:
+
+```{r}
+
+tm_shape(win_d2h) +
+  tm_raster("d2H", palette = "-inferno", style = 'cont') +
+  tm_layout(legend.outside = TRUE, title = "Winter d2H") + 
+  tm_shape(ut_cnty) +
+  tm_borders() +
+  tm_compass(position = c("left", "bottom")) + 
+  tm_scale_bar(position = c("right", "bottom")) 
+
+```
+
 Note that any **tmap** plot can be shown as an interactive map by setting the mode to `view`. For example (not run here):
 
 ```{r eval = FALSE}
@@ -864,7 +890,7 @@ plot(d18O.pred.ok["var1.var"])
 
 To assess the performance of our kriging model, we use a $n$-fold cross-validation. This splits the data into $n$ subsets, then iteratively predicts each subset from the other $n-1$ sets. The `krige.cv()` function performs the cross-validation: this takes the same arguments as the `krige()` function, but we leave out the object with coordinates for new predictions, and specify `nfold`, the number of subsets to be used. 
 
-```{r cache=TRUE, message=FALSE}
+```{r cache=FALSE, message=FALSE}
 
 d18O.cv.ok <- krige.cv(d18O ~ 1, ut_wi_spatial, d18O.vgm2, nmax=40, nfold=5)
 
